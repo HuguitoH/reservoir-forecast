@@ -57,10 +57,16 @@ def load_raw_csvs(data_dir: Path) -> pd.DataFrame:
     dfs = []
     for path in sorted(data_dir.glob("*.csv")):
         reservoir = path.stem.replace("AguaEmbalsada_", "").strip()
-        try:
-            df = pd.read_csv(path, sep=";", encoding="latin-1")
-        except UnicodeDecodeError:
-            df = pd.read_csv(path, sep=";", encoding="ISO-8859-1")
+
+        # Try utf-8-sig first — handles BOM automatically
+        # Fall back to latin-1 for files with European characters
+        for encoding in ("utf-8-sig", "latin-1", "ISO-8859-1"):
+            try:
+                df = pd.read_csv(path, sep=";", encoding=encoding)
+                break
+            except (UnicodeDecodeError, Exception):
+                continue
+
         df["reservoir"] = reservoir
         dfs.append(df)
 
@@ -82,25 +88,28 @@ def load_raw_csvs(data_dir: Path) -> pd.DataFrame:
 
 def _clean_year(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
-    out["year"] = pd.to_numeric(out["year"], errors="coerce")
-    out = out[out["year"].between(YEAR_MIN, YEAR_MAX) | out["year"].isna()]
-    out["year"] = out["year"].astype("Int64")
 
-    # RioLozoya_Riosequillo — reconstruct year sequence from scratch
-    # Keep only first 288 rows and assign years directly
+    out["year"] = pd.to_numeric(out["year"], errors="coerce")
+
+    # RioLozoya_Riosequillo — reconstruct year sequence
     riosequillo_mask = out["reservoir"] == MISSING_YEAR_RESERVOIR
     riosequillo_idx  = out.loc[riosequillo_mask].index[:288]
-
-    # Drop extra rows beyond 288
-    extra_idx = out.loc[riosequillo_mask].index[288:]
+    extra_idx        = out.loc[riosequillo_mask].index[288:]
     out = out.drop(extra_idx)
-
-    # Assign year sequence: 1998-2021, 12 months each
     years_sequence = [y for y in range(YEAR_MIN, YEAR_MAX + 1) for _ in range(12)]
     out.loc[riosequillo_idx, "year"] = years_sequence
 
-    # Forward fill AND backward fill to cover leading NAs
-    out["year"] = out["year"].ffill().bfill().astype(int)
+    # Sort by reservoir to keep rows together before ffill
+    out = out.sort_values("reservoir", kind="stable").reset_index(drop=True)
+
+    # Forward fill PER RESERVOIR
+    out["year"] = out.groupby("reservoir", sort=False)["year"].transform(
+        lambda x: x.ffill().bfill()
+    )
+
+    # Filter to valid year range
+    out = out[out["year"].between(YEAR_MIN, YEAR_MAX)]
+    out["year"] = out["year"].astype(int)
 
     return out
 
