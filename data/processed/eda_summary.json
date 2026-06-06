@@ -1,0 +1,43 @@
+{
+  "drought_thresholds": {
+    "severe_hm3": 488.5,
+    "moderate_hm3": 573.6,
+    "good_hm3": 772.5
+  },
+  "system_stats": {
+    "mean_hm3": 661.8,
+    "median_hm3": 667.4,
+    "min_hm3": 329.2,
+    "max_hm3": 907.9
+  },
+  "seasonality": {
+    "peak_months": [
+      "mayo",
+      "abril",
+      "junio"
+    ],
+    "trough_months": [
+      "octubre",
+      "noviembre",
+      "septiembre"
+    ]
+  },
+  "stationarity": {
+    "adf_statistic": -4.9063,
+    "p_value": 3.4e-05,
+    "is_stationary": true
+  },
+  "sarimax_order": {
+    "order": [
+      2,
+      0,
+      1
+    ],
+    "seasonal_order": [
+      1,
+      1,
+      1,
+      12
+    ]
+  }
+}
