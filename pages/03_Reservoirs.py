@@ -1,8 +1,3 @@
-"""
-pages/03_Reservoirs.py
-Individual reservoir explorer.
-"""
-
 from pathlib import Path
 
 import pandas as pd

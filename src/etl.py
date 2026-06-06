@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 # Constants
 
@@ -92,12 +93,13 @@ def _clean_year(df: pd.DataFrame) -> pd.DataFrame:
     out["year"] = pd.to_numeric(out["year"], errors="coerce")
 
     # RioLozoya_Riosequillo — reconstruct year sequence
-    riosequillo_mask = out["reservoir"] == MISSING_YEAR_RESERVOIR
-    riosequillo_idx  = out.loc[riosequillo_mask].index[:288]
-    extra_idx        = out.loc[riosequillo_mask].index[288:]
-    out = out.drop(extra_idx)
-    years_sequence = [y for y in range(YEAR_MIN, YEAR_MAX + 1) for _ in range(12)]
-    out.loc[riosequillo_idx, "year"] = years_sequence
+    if MISSING_YEAR_RESERVOIR in out["reservoir"].values:
+        riosequillo_mask = out["reservoir"] == MISSING_YEAR_RESERVOIR
+        riosequillo_idx  = out.loc[riosequillo_mask].index[:288]
+        extra_idx        = out.loc[riosequillo_mask].index[288:]
+        out = out.drop(extra_idx)
+        years_sequence = [y for y in range(YEAR_MIN, YEAR_MAX + 1) for _ in range(12)]
+        out.loc[riosequillo_idx, "year"] = years_sequence
 
     # Sort by reservoir to keep rows together before ffill
     out = out.sort_values("reservoir", kind="stable").reset_index(drop=True)

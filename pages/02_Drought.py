@@ -1,8 +1,3 @@
-"""
-pages/02_Drought.py
-Drought analysis — historical heatmap and risk breakdown.
-"""
-
 import json
 from pathlib import Path
 

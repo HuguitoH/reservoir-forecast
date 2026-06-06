@@ -12,10 +12,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.features import build_xgb_features
+from src.forecast import iterative_forecast, classify_capacity
 
-BG = "#0d0d0b"
-CARD_BG = "#141410"
+BG          = "#0d0d0b"
+CARD_BG     = "#141410"
 CARD_BORDER = "#222218"
 
 with open(Path(__file__).parent / "icons" / "waves-horizontal.svg") as f:
@@ -40,7 +40,6 @@ st.markdown(f"""
     h1, h2, h3, h4 {{ font-family: 'DM Serif Display', serif !important; letter-spacing: -0.02em; }}
     .stApp {{ background-color: {BG}; color: #e8e3d9; }}
     .section-divider {{ border: none; border-top: 1px solid {CARD_BORDER}; margin: 24px 0; }}
-
     .status-card {{
         background: {CARD_BG};
         border: 1px solid {CARD_BORDER};
@@ -57,7 +56,6 @@ st.markdown(f"""
     .status-moderate {{ border-top: 4px solid #ffaa44; }}
     .status-severe   {{ border-top: 4px solid #ff4444; }}
     .status-neutral  {{ border-top: 4px solid #4a9eff; }}
-
     .status-value {{
         font-family: 'DM Serif Display', serif;
         font-size: 2rem;
@@ -71,10 +69,7 @@ st.markdown(f"""
         letter-spacing: 0.12em;
         margin-top: 6px;
     }}
-    .status-sub {{
-        font-size: 0.75rem;
-        margin-top: 6px;
-    }}
+    .status-sub {{ font-size: 0.75rem; margin-top: 6px; }}
     .risk-badge {{
         display: inline-block;
         padding: 3px 10px;
@@ -88,8 +83,6 @@ st.markdown(f"""
     .risk-normal   {{ background: rgba(68,170,68,0.15);  color: #44aa44; }}
     .risk-moderate {{ background: rgba(255,170,68,0.15); color: #ffaa44; }}
     .risk-severe   {{ background: rgba(255,68,68,0.15);  color: #ff4444; }}
-    .risk-neutral  {{ background: rgba(74,158,255,0.15); color: #4a9eff; }}
-
     div[data-testid="stSelectbox"] label {{
         color: #666655 !important;
         font-size: 0.75rem !important;
@@ -128,33 +121,14 @@ DROUGHT_MODERATE = eda["drought_thresholds"]["moderate_hm3"]
 DROUGHT_GOOD     = eda["drought_thresholds"]["good_hm3"]
 
 @st.cache_data
-def forecast(n_months: int) -> tuple[pd.DatetimeIndex, list[float]]:
-    model        = bundle["model"]
-    feature_cols = bundle["feature_cols"]
-    n_lags       = bundle["n_lags"]
-    series       = df["total_hm3"].copy()
-    last_date    = series.index[-1]
-    preds, dates = [], []
-    series_ext   = series.copy()
-
-    for i in range(n_months):
-        df_feat  = build_xgb_features(series_ext, n_lags=n_lags)
-        last_row = df_feat.iloc[[-1]][feature_cols]
-        pred     = float(model.predict(last_row)[0])
-        next_dt  = last_date + pd.DateOffset(months=i + 1)
-        preds.append(pred)
-        dates.append(next_dt)
-        series_ext = pd.concat([series_ext, pd.Series([pred], index=[next_dt])])
-
-    return pd.DatetimeIndex(dates), preds
-
-def classify(value: float) -> tuple[str, str]:
-    if value < DROUGHT_SEVERE:
-        return "Severe drought", "severe"
-    elif value < DROUGHT_MODERATE:
-        return "Moderate drought", "moderate"
-    else:
-        return "Normal", "normal"
+def run_forecast(n_months: int) -> tuple[pd.DatetimeIndex, list[float]]:
+    return iterative_forecast(
+        series       = df["total_hm3"],
+        model        = bundle["model"],
+        feature_cols = bundle["feature_cols"],
+        n_lags       = bundle["n_lags"],
+        n_months     = n_months,
+    )
 
 def color_for(cls: str) -> str:
     return "#44aa44" if cls == "normal" else "#ffaa44" if cls == "moderate" else "#ff4444"
@@ -170,11 +144,11 @@ st.markdown(
 )
 st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
-# Status cards — all four as HTML for consistent height and alignment
+# Status cards
 
 last_value           = float(df["total_hm3"].iloc[-1])
 last_date            = df.index[-1]
-last_label, last_cls = classify(last_value)
+last_label, last_cls = classify_capacity(last_value, DROUGHT_SEVERE, DROUGHT_MODERATE)
 hist_mean            = float(df["total_hm3"].mean())
 pct_mean             = (last_value / hist_mean - 1) * 100
 margin               = last_value - DROUGHT_SEVERE
@@ -193,7 +167,7 @@ with col1:
 
 with col2:
     sign = "+" if pct_mean >= 0 else ""
-    sc = "#44aa44" if pct_mean >= 0 else "#ff4444"
+    sc   = "#44aa44" if pct_mean >= 0 else "#ff4444"
     st.markdown(f"""
     <div class='status-card status-neutral'>
         <div class='status-value' style='color:#e8e3d9'>{hist_mean:,.0f} hm³</div>
@@ -243,7 +217,7 @@ with col_ctrl:
     )
 horizon = HORIZON_OPTIONS[horizon_label]
 
-future_dates, future_preds = forecast(horizon)
+future_dates, future_preds = run_forecast(horizon)
 
 # Main chart
 
@@ -295,10 +269,8 @@ fig.add_vline(
 
 fig.update_layout(
     template="plotly_dark",
-    paper_bgcolor=BG,
-    plot_bgcolor=BG,
-    height=480,
-    hovermode="x unified",
+    paper_bgcolor=BG, plot_bgcolor=BG,
+    height=480, hovermode="x unified",
     legend=dict(orientation="h", font=dict(color="#666655", size=11),
                 bgcolor="rgba(0,0,0,0)"),
     xaxis=dict(gridcolor=CARD_BG),
@@ -318,7 +290,7 @@ n_moderate = sum(1 for p in future_preds if DROUGHT_SEVERE <= p < DROUGHT_MODERA
 n_normal   = sum(1 for p in future_preds if p >= DROUGHT_MODERATE)
 min_pred   = min(future_preds)
 min_date   = future_dates[future_preds.index(min_pred)]
-min_label, min_cls = classify(min_pred)
+min_label, min_cls = classify_capacity(min_pred, DROUGHT_SEVERE, DROUGHT_MODERATE)
 
 r1, r2, r3, r4 = st.columns(4)
 
