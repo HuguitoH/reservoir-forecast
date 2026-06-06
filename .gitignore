@@ -1,8 +1,8 @@
-# Data - raw CSVs not committed
-data/
+# Data - raw CSVs and processed
+# data/
 
 # Models - large binary files
-models/
+# models/
 
 # Python
 __pycache__/
