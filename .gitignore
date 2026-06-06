@@ -1,0 +1,20 @@
+# Data - raw CSVs not committed
+data/
+
+# Models - large binary files
+models/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+*.egg-info/
+dist/
+
+# Environment
+.venv/
+.python-version
+.env
+
+# tests
+.coverage
